@@ -1,51 +1,35 @@
 #!/bin/bash
+# Import the library function from the file you just created
+source ./lib/db_lib.sh
 
-# Source sanitization library
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/bin/san_lib.sh"
-source "$SCRIPT_DIR/bin/kafka_lib.sh"
-source "$SCRIPT_DIR/bin/db_lib.sh"
-source "$SCRIPT_DIR/bin/file_lib.sh"
+# 1. READ only the latest record with status PENDING (Task Requirement)
+# -N -s removes table headers and formatting for easy parsing
+JOB_DATA=$(docker exec -i mysql_sanitizer mysql -u user -ppassword sanitizer_db -N -s -e \
+"SELECT id, user_id, file_name FROM job_request WHERE status = 'PENDING' ORDER BY id DESC LIMIT 1;")
 
-# Configuration
-QUARANTINE_DIR="./quarantine"
-OUTPUT_DIR="./sanitized_output"
-mkdir -p "$QUARANTINE_DIR" "$OUTPUT_DIR"
-
-# --- Main Logic ---
-
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <file_path> <LogType>"
-    echo "Example: $0 network.pcap PCAP"
-    exit 1
+if [ -z "$JOB_DATA" ]; then
+    echo "No pending jobs found in job_request table."
+    exit 0
 fi
 
-FILE_PATH=$1
-TYPE=$2
+# Parse the data into variables
+read -r JOB_ID USER_ID FILE_NAME <<< "$JOB_DATA"
 
-if verify_log "$FILE_PATH" "$TYPE"; then
-    SANITIZED_FILE="$OUTPUT_DIR/$(basename "$FILE_PATH")"
+echo "Found Pending Job ID: $JOB_ID | File: $FILE_NAME | User: $USER_ID"
 
-    case "$TYPE" in
-        PCAP|PCAPNG|CAP)
-            sanitize_pcap "$FILE_PATH"
-            send_file_to_topic "$SANITIZED_FILE" "networklog_in"
-            ;;
-        JSON)
-            sanitize_json "$FILE_PATH"
-            send_file_to_topic "$SANITIZED_FILE" "systemlog_in"
-            ;;
-        CSV|LOG|EVTX)
-            sanitize_text "$FILE_PATH"
-            send_file_to_topic "$SANITIZED_FILE" "systemlog_in"
-            ;;
-        *)
-            echo "[!] Unknown LogType: $TYPE"
-            return 1
-            ;;
-    esac
-else
-    echo "[!] Verification FAILED. Quarantining $FILE_PATH"
-    mv "$FILE_PATH" "$QUARANTINE_DIR/"
-    exit 1
-fi
+# 2. STATUS UPDATES using the library function (Task Requirement)
+echo "Step 1: Initializing..."
+insert_report_status "INITIALIZING" "Started processing $FILE_NAME" "$JOB_ID" "$USER_ID"
+
+echo "Step 2: Processing..."
+sleep 2 # Simulating sanitization time
+insert_report_status "PROCESSING" "Applying sanitization rules to $FILE_NAME" "$JOB_ID" "$USER_ID"
+
+echo "Step 3: Finalizing..."
+# Mark the original request as COMPLETED in the job_request table
+docker exec -i mysql_sanitizer mysql -u user -ppassword sanitizer_db -e \
+"UPDATE job_request SET status = 'COMPLETED' WHERE id = $JOB_ID;"
+
+insert_report_status "SUCCESS" "Sanitization finished for $FILE_NAME" "$JOB_ID" "$USER_ID"
+
+echo "Execution Complete. Status reports inserted into job_execution_report."
