@@ -35,14 +35,18 @@ fi
 
 IFS=$'\t' read -r JOB_ID FILE_NAME CONTENT_TYPE FILE_CONTENT_B64 <<< "$ROW"
 
+insert_log "IN PROGRESS" "Job started" $JOB_ID
+
 if [[ -z "${FILE_CONTENT_B64:-}" ]]; then
   echo "Empty blob content for job_request.id=${JOB_ID}" >&2
+  insert_log "ERROR" "Empty blob content" $JOB_ID
   # The job request should be updated to COMPLETED_WITH_WARNINGS if the blob content is empty.
   update_job_request_status "$JOB_ID" "$STATUS_COMPLETED_WITH_WARNINGS"
   # the job execution log should be updated to include the warning message about empty blob content.
 fi
 
 echo "job_id=${JOB_ID} file_name=${FILE_NAME} content_type=${CONTENT_TYPE}"
+insert_log "SANITIZING" "Sanitizing file content" $JOB_ID
 sanitized_msg="$(sanitize_base64 "$FILE_CONTENT_B64" "$JOB_ID" "$CONTENT_TYPE")"
 echo "Sanitized message: $sanitized_msg"
 # Build the message and publish to Kafka Sanitizer Input Topic
@@ -60,10 +64,12 @@ json_message="$(build_message \
 publish_message "$INPUT_TOPIC" "$json_message"
 
 echo "Published message to topic: $INPUT_TOPIC"
+insert_log "COMPLETED" "Message sent to Kafka" $JOB_ID
 # also log the message meta information such as timestamp, origin,  etc.
 echo "Message meta: origin=$MESSAGE_ORIGIN, source=$MESSAGE_SOURCE, type=$CONTENT_TYPE"
 echo "Pretty-printed message:"
 pretty_print_message "$json_message"
 
 update_job_request_status "$JOB_ID" "$STATUS_AI_PROCESSING_PENDING"
+insert_log "COMPLETED" "Job sent to next processing stage"
 echo "Updated job_request.id=${JOB_ID} status to $STATUS_AI_PROCESSING_PENDING"

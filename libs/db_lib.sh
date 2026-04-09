@@ -38,10 +38,7 @@ current_status=$STATUS_PENDING
 
 run_mysql() {
   local sql="$1"
-  MYSQL_PWD="$DB_PASSWORD" mysql --protocol=TCP \
-    -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -D "$DB_NAME" \
-    --batch --raw --skip-column-names \
-    -e "$sql"
+  podman exec -i mysql_sanitizer mysql -u root -prootpassword sanitizer_db -e "$sql"
 }
 
 insert_job_request() {
@@ -99,4 +96,12 @@ update_job_request_status() {
     SET status = '$status'
     WHERE id = ${job_id};
   "
+}
+
+insert_log() {
+	STATUS=$1
+	LOG_MSG=$2
+	JOB_ID=$3
+
+	podman exec -i mysql_sanitizer mysql -u root -prootpassword sanitizer_db -e "INSERT INTO job_execution_report (start_time, execution_log, status, job_request_id) VALUES (NOW(), '$LOG_MSG', '$STATUS', $JOB_ID);"
 }
