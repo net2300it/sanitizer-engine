@@ -45,9 +45,15 @@ while true; do
         # 1. Pipe Base64 decoded data to Python stdin
         # 2. Capture stdout (result message)
         # 3. Check exit code: 0 = Success, 1 = Threat
+	tmp_file="/dev/shm/tmp_${job_id}.txt"
+	echo "$blod_b64" | base64 -d > "$tmp_file"
+	#antovirus check
+	./antivirus_san "$tmp_file"
+	#python sanitizer
+	python3 complex_sanitizer.py "$tmp_file"
         if output=$(echo "$blob_b64" | base64 -d | python3 "$PYTHON_SCRIPT" "$MAX_ENTROPY" 2>&1); then
             # Success
-            echo "[+] Entropy Check Passed: $output"
+            echo "[+] Entropy Check: Passed: $output"
             mysql_exec "UPDATE job_request SET status='${JOB_STATUS_COMPLETE}' WHERE id=${job_id};"
         else
             # Threat Detected
