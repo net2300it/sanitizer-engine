@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  sanitizer-engine:
+    build: .
+    container_name: sanitizer-yara-engine
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount rules directory for easy updates
+      - ./rules:/app/rules:ro
+      # Mount quarantine directory to persist quarantined files
+      - ./quarantine:/app/quarantine
+      # Mount logs directory
+      - ./logs:/app/logs
+    environment:
+      - YARA_RULES_PATH=/app/rules
+      - QUARANTINE_DIR=/app/quarantine
+      - SCAN_TIMEOUT=60
+      - FLASK_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - sanitizer-network
+
+networks:
+  sanitizer-network:
+    driver: bridge
