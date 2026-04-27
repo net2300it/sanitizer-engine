@@ -9,6 +9,9 @@ DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-user}"
 DB_PASSWORD="${DB_PASSWORD:-password}"
+# ADD THIS LINE RIGHT HERE:
+DB_NAME="${DB_NAME:-sanitizer_db}"
+
 # Initial States
 declare -r STATUS_PENDING="PENDING"
 declare -r STATUS_QUEUED="QUEUED"
@@ -99,6 +102,28 @@ update_job_request_status() {
     SET status = '$status'
     WHERE id = ${job_id};
   "
+}
+
+# Refactored to use the working run_mysql wrapper
+insert_execution_log() {
+    local job_id="$1"
+    local user_id="$2"
+    local status="$3"
+    local log_msg="$4"
+
+    # We use run_mysql so it inherits the TCP protocol and credentials
+    run_mysql "INSERT INTO job_execution_report 
+      (start_time, execution_node, execution_log, status, job_request_id, user_id)
+      VALUES (NOW(6), '$(hostname)', '$log_msg', '$status', '$job_id', '$user_id');"
+}
+
+# Updated to use the correct DDL column names and your run_mysql wrapper
+read_latest_pending_job_request() {
+    run_mysql "SELECT id, file_name, file_content_content_type, 
+      REPLACE(TO_BASE64(file_content), '\n', '') 
+      FROM job_request 
+      WHERE status = '$STATUS_PENDING' 
+      ORDER BY id DESC LIMIT 1;"
 }
 
 # Read only the latest PENDING job_request record

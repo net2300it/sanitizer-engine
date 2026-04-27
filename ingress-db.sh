@@ -265,4 +265,4 @@ echo "Pretty-printed message:"
 pretty_print_message "$json_message"
 
 update_job_request_status "$JOB_ID" "$STATUS_AI_PROCESSING_PENDING"
-echo "Updated job_request.id=${JOB_ID} status to $STATUS_AI_PROCESSING_PENDING"
+echo"Updated job_request.id=${JOB_ID} status to $STATUS_AI_PROCESSING_PENDING"
